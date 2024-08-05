@@ -26,6 +26,8 @@ impl Core {
     {
         // println!("PC={:#08X}", self.pc);
 
+        // println!("$t2 = {:#04X}", self.registers.get(10));
+
         let inst = self.memory.get(self.pc).unwrap();
 
         // println!("Executing instruction {inst:#08X} at PC={:#08X}", self.pc);
@@ -157,7 +159,7 @@ impl Core {
 
                 self.registers.set(rt, imm << 16);
             }
-            _ => todo!(),
+            _ => todo!("Unimplemented instruction: {:#04X}", inst),
         }
     }
 
@@ -182,7 +184,16 @@ impl Core {
             }
             0x21 => {
                 // addu
-                self.registers.set(rd, rt_val + rs_val);
+                // println!(
+                //     "{}: {}({:#04X}) + {}({:#04X})",
+                //     self.pc - 0x00100000,
+                //     rs,
+                //     rs_val,
+                //     rt,
+                //     rt_val
+                // );
+                self.registers
+                    .set(rd, ((rt_val as i32) + (rs_val as i32)) as u32);
             }
             0x24 => {
                 // and
@@ -196,9 +207,17 @@ impl Core {
                 // xor
                 self.registers.set(rd, rt_val ^ rs_val);
             }
+            0x2A => {
+                // slt
+                if rs_val < rt_val {
+                    self.registers.set(rd, 0x01);
+                } else {
+                    self.registers.set(rd, 0x00);
+                }
+            }
 
             _ => {
-                todo!()
+                todo!("Unimplemented r-type instruction, funct: {:#04X}", funct)
             }
         }
     }

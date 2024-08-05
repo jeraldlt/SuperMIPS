@@ -16,6 +16,9 @@ use sdl2::keyboard::Scancode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 
+use std::io::prelude::*;
+use std::io::stdout;
+
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 
@@ -37,41 +40,55 @@ static KEYMAP: [(Scancode, u32); 14] = [
     (Scancode::RShift,   11),
 ];
 
-fn read_binary_file(path: String) -> Vec<u32> {
-    let mut test: Vec<u32> = Vec::new();
+fn vecu8_to_vecu32(bytes: Vec<u8>) -> Vec<u32> {
+    let mut words: Vec<u32> = Vec::new();
     let mut count = 0;
     let mut val: u32 = 0;
 
-    for byte in std::fs::read(path).unwrap() {
+    for byte in bytes {
         val |= (byte as u32) << (8 * count);
         count += 1;
         if count == 4 {
-            test.push(val);
+            words.push(val);
             val = 0;
             count = 0;
         }
     }
     if count > 0 {
-        test.push(val);
+        words.push(val);
     }
 
-    test
+    words
+}
+
+fn read_binary_file(path: String) -> Vec<u32> {
+    vecu8_to_vecu32(std::fs::read(path).unwrap())
 }
 
 pub fn main() {
-    let test_program = read_binary_file("test.bin".into());
+    let (text_bytes, data_bytes) = mips_assembler::assemble("test.asm");
+    let text = vecu8_to_vecu32(text_bytes);
+    let mut data = vecu8_to_vecu32(data_bytes);
 
+    // let text = read_binary_file("test.bin".into());
+    // let mut data = read_binary_file("test.data".into());
+
+    // for (i, word) in (&text).iter().enumerate() {
+    // println!("{i}: {:#04X}", word);
+    // }
+    // let test_program = read_binary_file("test.bin".into());
+    // let test_data = read_binary_file("test.data".into());
     // let test_program: Vec<u32> = vec![
     //     0x24020005, 0x3c011001, 0x34240003, 0x0000000c, 0x24020020, 0x3c017777, 0x342477ff,
     //     0x0000000c, 0x24020022, 0x3c01ff00, 0x342400ff, 0x3c010040, 0x34250040, 0x3c010080,
     //     0x34260080, 0x0000000c, 0x24020001, 0x0000000c, 0x24020002, 0x0000000c, 0x08100004,
     // ];
-    let test_data: Vec<u32> = vec![0x6e756f42, 0x53207963, 0x72617571, 0x00002165];
-    let mut data = test_data.clone();
+    // let test_data: Vec<u32> = vec![0x6e756f42, 0x53207963, 0x72617571, 0x00002165];
+    // let mut data = test_data.clone();
 
     let mut core = Core::new_mips_default();
-    core.load_text(test_program);
-    core.load_data(test_data);
+    core.load_text(text.clone());
+    core.load_data(data.clone());
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -143,6 +160,18 @@ pub fn main() {
                     spin_sleep::sleep(framerate.saturating_sub(delta_t));
                     // std::thread::sleep(framerate - delta_t);
                 }
+                0x03 => {
+                    let msg = get_string_at_address(&data, regs[4]);
+                    print!("{msg}");
+                    stdout().flush().unwrap();
+                }
+                0x04 => match regs[5] {
+                    0 => print!("{}", regs[4]),
+                    1 => print!("{}", regs[4]),
+                    2 => print!("{:#04X}", regs[4]),
+                    3 => print!("{}", (regs[4] & 0xFF) as u8 as char),
+                    _ => {}
+                },
                 0x05 => {
                     let title = get_string_at_address(&data, regs[4]);
                     canvas.window_mut().set_title(title.as_str()).unwrap();
