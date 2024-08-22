@@ -38,7 +38,7 @@ enum Commands {
     },
     /// Print a document file that details a characteristic of SuperMIPS
     ///
-    /// Available docs are: instructions, syscalls
+    /// Available docs are: instructions, syscalls, memory
     Docs {
         /// Name of the doc to print
         doc: String,
@@ -67,6 +67,7 @@ enum Commands {
 enum Docs {
     Instructions,
     SystemCalls,
+    Memory,
 }
 
 impl Docs {
@@ -74,6 +75,7 @@ impl Docs {
         match input.to_lowercase().as_str() {
             "instructions" => Some(Docs::Instructions),
             "syscalls" => Some(Docs::SystemCalls),
+            "memory" => Some(Docs::Memory),
             _ => None,
         }
     }
@@ -173,6 +175,7 @@ fn print_doc(doc: String) -> Result<(), SuperMipsError> {
         match doc {
             Docs::Instructions => skin.print_text(include_str!("../docs/instructions.md")),
             Docs::SystemCalls => skin.print_text(include_str!("../docs/syscalls.md")),
+            Docs::Memory => skin.print_text(include_str!("../docs/memory.md")),
         }
     } else {
         // return error
