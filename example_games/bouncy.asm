@@ -1,5 +1,5 @@
 .data
-	title: .asciiz "Bouncy Square!"
+	title: .asciiz "Bouncy Square"
 	msg_1: .asciiz "The square has bounced "
 	msg_2: .asciiz " times.\n"
 .text

@@ -2,108 +2,31 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
 
-mod errors;
-use errors::SuperMipsError;
-
-use mimic_emulator::mips32::assembler;
-use mimic_emulator::mips32::core::Core;
-
-use clap::{Parser, Subcommand};
-use rand::prelude::*;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::keyboard::Scancode;
-use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
-use termimad::crossterm::style::{Attribute::*, Color::*};
-use termimad::*;
+use mimic_emulator::assembler;
+use mimic_emulator::core::Core;
 
 use std::io::prelude::*;
 use std::io::stdout;
-use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-enum Commands {
-    /// Assemble a MIPS assembly file and run it
-    Run {
-        /// A MIPS assembly file that the SuperMIPS emulator will assemble and run.
-        file: PathBuf,
-    },
-    /// Print a document file that details a characteristic of SuperMIPS
-    ///
-    /// Available docs are: instructions, syscalls
-    Docs {
-        /// Name of the doc to print
-        doc: String,
-    },
-
-    /// Run an example game
-    ///
-    /// Available example games are: bouncy
-    Example {
-        /// Name of the example game
-        example: String,
-    },
-
-    /// Print the source of an available example game
-    Source {
-        /// Name of the example game
-        example: String,
-
-        /// Optional file to save the game source to (will print to stdout if this is not included)
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
-}
-
-#[derive(Debug, Clone)]
-enum Docs {
-    Instructions,
-    SystemCalls,
-}
-
-impl Docs {
-    fn from_string(input: String) -> Option<Self> {
-        match input.to_lowercase().as_str() {
-            "instructions" => Some(Docs::Instructions),
-            "syscalls" => Some(Docs::SystemCalls),
-            _ => None,
-        }
-    }
-}
-
-const HEADER: &str = r"
-   ____                  __  __________  ____
-  / __/_ _____  ___ ____/  |/  /  _/ _ \/ __/
- _\ \/ // / _ \/ -_) __/ /|_/ // // ___/\ \  
-/___/\_,_/ .__/\__/_/ /_/  /_/___/_/  /___/  
-        /_/     ";
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 
 #[rustfmt::skip] // Key numbers lined up nicely
-static KEYMAP: [(Scancode, u32); 14] = [
-    (Scancode::Escape,    0),
-    (Scancode::W,         1),
-    (Scancode::A,         2),
-    (Scancode::S,         3),
-    (Scancode::D,         4),
-    (Scancode::Up,        5),
-    (Scancode::Left,      6),
-    (Scancode::Down,      7),
-    (Scancode::Right,     8),
-    (Scancode::Space,     9),
-    (Scancode::Return,   10),
-    (Scancode::KpEnter,  10),
-    (Scancode::LShift,   11),
-    (Scancode::RShift,   11),
+static KEYMAP: [(&str, u32); 5] = [
+    ("Escape",       0),
+    ("KeyW",         1),
+    ("KeyA",         2),
+    ("KeyS",         3),
+    ("KeyD",         4),
+    // (Scancode::Up,        5),
+    // (Scancode::Left,      6),
+    // (Scancode::Down,      7),
+    // (Scancode::Right,     8),
+    // (Scancode::Space,     9),
+    // (Scancode::Return,   10),
+    // (Scancode::KpEnter,  10),
+    // (Scancode::LShift,   11),
+    // (Scancode::RShift,   11),
 ];
 
 fn vecu8_to_vecu32(bytes: Vec<u8>) -> Vec<u32> {
@@ -127,72 +50,8 @@ fn vecu8_to_vecu32(bytes: Vec<u8>) -> Vec<u32> {
     words
 }
 
-fn read_binary_file(path: String) -> Vec<u32> {
-    vecu8_to_vecu32(std::fs::read(path).unwrap())
-}
-
-pub fn main() -> Result<(), SuperMipsError> {
-    println!("{}Version {}\n", HEADER, env!("CARGO_PKG_VERSION"));
-    let args = Args::parse();
-
-    return match args.command {
-        Commands::Run { file } => run_from_file(file),
-        Commands::Docs { doc } => print_doc(doc),
-        Commands::Example { example } => match example.to_lowercase().as_str() {
-            "bouncy" => run_from_string(include_str!("../example_games/bouncy.asm").to_owned()),
-
-            _ => Ok(()), // throw error,
-        },
-        Commands::Source { example, output } => {
-            let contents = match example.to_lowercase().as_str() {
-                "bouncy" => {
-                    include_str!("../example_games/bouncy.asm")
-                }
-
-                _ => "", // throw error,
-            };
-
-            if let Some(pathbuf) = output {
-                std::fs::write(pathbuf, contents).unwrap();
-            } else {
-                println!("{}", contents);
-            }
-
-            Ok(())
-        }
-    };
-}
-
-fn print_doc(doc: String) -> Result<(), SuperMipsError> {
-    let mut skin = MadSkin::default();
-    skin.bold.set_fg(Yellow);
-    // skin.paragraph.set_fgbg(Magenta, rgb(30, 30, 40));
-    skin.italic.add_attr(Underlined);
-
-    if let Some(doc) = Docs::from_string(doc) {
-        match doc {
-            Docs::Instructions => skin.print_text(include_str!("../docs/instructions.md")),
-            Docs::SystemCalls => skin.print_text(include_str!("../docs/syscalls.md")),
-        }
-    } else {
-        // return error
-    }
-    Ok(())
-}
-
-fn run_from_file(path: PathBuf) -> Result<(), SuperMipsError> {
-    let (text_bytes, data_bytes) = assembler::assemble_from_file(path.as_path())?;
-
-    run(text_bytes, data_bytes)
-}
-
-fn run_from_string(contents: String) -> Result<(), SuperMipsError> {
-    let (text_bytes, data_bytes) = assembler::assemble_from_string(contents)?;
-
-    run(text_bytes, data_bytes)
-}
-
-fn run(text_bytes: Vec<u8>, data_bytes: Vec<u8>) -> Result<(), SuperMipsError> {
+pub fn main() {
+    let (text_bytes, data_bytes) = assembler::assemble_from_file("test.asm");
     let text = vecu8_to_vecu32(text_bytes);
     let mut data = vecu8_to_vecu32(data_bytes);
 
@@ -216,24 +75,6 @@ fn run(text_bytes: Vec<u8>, data_bytes: Vec<u8>) -> Result<(), SuperMipsError> {
     core.load_text(text.clone());
     core.load_data(data.clone());
 
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
-
-    let window = video_subsystem
-        .window("SuperMIPS", WIDTH, HEIGHT)
-        .position_centered()
-        .build()
-        .unwrap();
-
-    let mut canvas = window.into_canvas().build().unwrap();
-
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
-    canvas.clear();
-    canvas.present();
-
-    let ev = sdl_context.event().unwrap();
-    let mut event_pump = sdl_context.event_pump().unwrap();
-
     let framerate = std::time::Duration::from_secs_f32(1.0 / 30.0);
     let mut last_frame = std::time::Instant::now();
     // let mut running = true;
@@ -242,22 +83,17 @@ fn run(text_bytes: Vec<u8>, data_bytes: Vec<u8>) -> Result<(), SuperMipsError> {
     let mut keys_pressed: u32 = 0;
     let mut data_generation: u32 = 0;
 
-    let mut rng = thread_rng();
-
     'running: loop {
-        // i = (i + 1) % 255;
-        // canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
-        // canvas.clear();
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. } => break 'running,
-                Event::KeyDown {
-                    keycode: Some(Keycode::SPACE),
-                    ..
-                } => canvas.window_mut().set_title("It worked!").unwrap(),
-                _ => {}
-            }
-        }
+        // for event in event_pump.poll_iter() {
+        //     match event {
+        //         Event::Quit { .. } => break 'running,
+        //         Event::KeyDown {
+        //             keycode: Some(Keycode::SPACE),
+        //             ..
+        //         } => canvas.window_mut().set_title("It worked!").unwrap(),
+        //         _ => {}
+        //     }
+        // }
 
         if let Some(d) = core.clone_data_as_needed(&mut data_generation) {
             data = d;
@@ -348,13 +184,11 @@ fn run(text_bytes: Vec<u8>, data_bytes: Vec<u8>) -> Result<(), SuperMipsError> {
         // println!("Keys held: {}", syscalls::get_keys_held(&input));
         // println!("PC: {}", core.pc);
 
-        core.tick(handle_syscall)?;
+        core.tick(handle_syscall);
 
         // canvas.present();
         // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
-
-    Ok(())
 }
 
 fn u32_to_color(color: u32) -> Color {

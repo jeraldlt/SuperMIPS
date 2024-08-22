@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+mimic_emulator = {git = "https://github.com/jeraldlt/mimic.git", features = ["mips32"]}
 sdl2 = {version = "0.37", features = ["bundled"]}
 rand = "0.8"
 spin_sleep = "1.2"
-mips_assembler = {path = "../mips-assembler/"}
+clap = {version = "4.5", features = ["derive"]}
+thiserror = "1.0"
+termimad = "0.30.0"
